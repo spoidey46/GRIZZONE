@@ -4,6 +4,7 @@ import re
 import sqlite3
 import json
 import os
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 DATABASE_NAME = os.environ.get("GRIZZONE_DB_PATH", "grizzone.db")
@@ -13,6 +14,18 @@ def _connect():
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     return connection
+
+@contextmanager
+def _db():
+    connection = _connect()
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 def _hash_password(password, salt=None):
     salt = salt or os.urandom(16)
@@ -28,7 +41,7 @@ def _verify_password(password, stored):
         return False
 
 def create_database():
-    with _connect() as con:
+    with _db() as con:
         con.execute("""CREATE TABLE IF NOT EXISTS users(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL UNIQUE COLLATE NOCASE,
