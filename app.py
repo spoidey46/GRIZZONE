@@ -102,10 +102,14 @@ def _markdown_dossier(scan):
     lines.extend([f"- {x.get('type','Link')}: {x.get('url','')}" for x in profile.get("important_pages",[])] or ["- Not found"])
     lines += ["", "### Social / author metadata"]
     lines.extend(["- "+str(x) for x in profile.get("social_profiles",[])] or ["- Not found"])
+    lines += ["", "## What this website does"]
+    description = profile.get("description", "Not found")
+    lines.append(str(description) if description and description != "Not found" else "Purpose could not be determined from homepage metadata alone.")
     research=intel.get("web_research",{})
-    lines += ["", "## Public web research", "- Status: "+str(research.get("status","Not available"))]
+    lines += ["", "## Company background, products and services", "- Status: "+str(research.get("status","Not available"))]
     if research.get("answer"):
         lines += ["", str(research.get("answer"))]
+    lines += ["", "### Research source links"]
     for item in research.get("results",[]):
         lines.append(f"- {item.get('title','Untitled')} — {item.get('url','')}")
         if item.get("snippet"):
@@ -202,13 +206,20 @@ def render_report(scan):
         st.write(social if social else "Not found in checked metadata")
         st.markdown("#### Structured data types")
         st.write(profile.get("structured_data_types",[]))
-        st.markdown("#### Public company / founder web research")
+        st.markdown("#### What does this website do?")
+        description=profile.get("description","Not found")
+        if description and description != "Not found":
+            st.write(description)
+        else:
+            st.info("The homepage did not provide a readable description. Public web research may help identify the site's purpose.")
+        st.markdown("#### Company background, products and services")
         research=intel.get("web_research",{})
         st.caption(research.get("status","Web research not available"))
         if research.get("answer"):
             st.write(research["answer"])
         results=research.get("results",[])
         if results:
+            st.markdown("#### Sources to verify")
             for item in results:
                 title=item.get("title","Search result")
                 url=item.get("url","")
@@ -216,8 +227,8 @@ def render_report(scan):
                 if url: st.write(url)
                 if item.get("snippet"): st.caption(item["snippet"])
         else:
-            st.info("For cross-site company background and founder research, configure TAVILY_API_KEY in the environment. Website metadata alone cannot provide a complete biography.")
-        st.warning("Company, founder, and social details are claims published by the website unless independently corroborated.")
+            st.info("To research what a company does, its products, customers, founders and history across public websites, configure TAVILY_API_KEY. Without it, GRIZZONE can show only information available from the scanned site's public metadata.")
+        st.warning("Search summaries can be incomplete or incorrect. Verify company, founder, product and ownership claims against the linked sources.")
     with t3:
         st.markdown("#### Domain registration")
         for key,label in [("domain","Domain"),("registrar","Registrar"),("registrant_contact","Public registrant/contact"),("created","Registered"),("updated","Last updated"),("expires","Expires"),("domain_status","Domain status"),("nameservers","Nameservers")]:
