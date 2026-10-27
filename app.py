@@ -102,6 +102,14 @@ def _markdown_dossier(scan):
     lines.extend([f"- {x.get('type','Link')}: {x.get('url','')}" for x in profile.get("important_pages",[])] or ["- Not found"])
     lines += ["", "### Social / author metadata"]
     lines.extend(["- "+str(x) for x in profile.get("social_profiles",[])] or ["- Not found"])
+    research=intel.get("web_research",{})
+    lines += ["", "## Public web research", "- Status: "+str(research.get("status","Not available"))]
+    if research.get("answer"):
+        lines += ["", str(research.get("answer"))]
+    for item in research.get("results",[]):
+        lines.append(f"- {item.get('title','Untitled')} — {item.get('url','')}")
+        if item.get("snippet"):
+            lines.append("  "+str(item.get("snippet")))
     lines += ["", "## Domain registration"]
     for key,label in [
         ("registrar","Registrar"),("registrant_contact","Public registrant/administrative contact"),
@@ -194,6 +202,21 @@ def render_report(scan):
         st.write(social if social else "Not found in checked metadata")
         st.markdown("#### Structured data types")
         st.write(profile.get("structured_data_types",[]))
+        st.markdown("#### Public company / founder web research")
+        research=intel.get("web_research",{})
+        st.caption(research.get("status","Web research not available"))
+        if research.get("answer"):
+            st.write(research["answer"])
+        results=research.get("results",[])
+        if results:
+            for item in results:
+                title=item.get("title","Search result")
+                url=item.get("url","")
+                st.markdown(f"**{title}**")
+                if url: st.write(url)
+                if item.get("snippet"): st.caption(item["snippet"])
+        else:
+            st.info("For cross-site company background and founder research, configure TAVILY_API_KEY in the environment. Website metadata alone cannot provide a complete biography.")
         st.warning("Company, founder, and social details are claims published by the website unless independently corroborated.")
     with t3:
         st.markdown("#### Domain registration")
