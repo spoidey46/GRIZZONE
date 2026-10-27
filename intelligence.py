@@ -48,9 +48,19 @@ class _PageMetadata(HTMLParser):
         self.jsonld_parts = []
         self.in_jsonld = False
         self.current_jsonld = []
+        self.links = []
+        self.language = "Not found"
+        self.generators = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if tag.lower() == "html" and attrs.get("lang"):
+            self.language = str(attrs["lang"])[:80]
+        if tag.lower() == "link":
+            rel = str(attrs.get("rel", "")).lower()
+            href = str(attrs.get("href", "")).strip()
+            if href and rel:
+                self.links.append({"rel": rel[:100], "href": href[:1000]})
         if tag.lower() == "title":
             self.in_title = True
         if tag.lower() == "meta":
@@ -58,6 +68,8 @@ class _PageMetadata(HTMLParser):
             value = (attrs.get("content") or "").strip()
             if key and value:
                 self.meta[key] = value[:1000]
+                if key == "generator":
+                    self.generators.append(value[:200])
         if tag.lower() == "script" and "ld+json" in attrs.get("type", "").lower():
             self.in_jsonld = True
             self.current_jsonld = []
@@ -98,6 +110,17 @@ def _website_profile(url, host):
         "founder": "Not found",
         "founding_date": "Not found",
         "published_website": "Not found",
+        "canonical_url": "Not found",
+        "language": "Not found",
+        "generator": "Not found",
+        "robots_policy": "Not found",
+        "theme_color": "Not found",
+        "social_profiles": [],
+        "important_pages": [],
+        "http_status": "Not checked",
+        "content_type": "Not disclosed",
+        "server_header": "Not disclosed",
+        "security_headers": {},
         "official_links": [],
     }
     parsed = urlparse(url if "://" in url else "https://" + url)
@@ -119,6 +142,12 @@ def _website_profile(url, host):
             if response.is_redirect:
                 profile["status"] = "Skipped: site redirected; no redirect was followed"
                 return profile
+            profile["http_status"] = str(response.status_code)
+            profile["content_type"] = response.headers.get("Content-Type", "Not disclosed")
+            profile["server_header"] = response.headers.get("Server", "Not disclosed")
+            for header_name in ["Strict-Transport-Security", "Content-Security-Policy", "X-Content-Type-Options", "X-Frame-Options", "Referrer-Policy", "Permissions-Policy"]:
+                profile["security_headers"][header_name] = "Present" if response.headers.get(header_name) else "Missing"
+            profile["last_modified"] = response.headers.get("Last-Modified", "Not disclosed")
             if response.status_code >= 400:
                 profile["status"] = "Page unavailable (HTTP {})".format(response.status_code)
                 return profile
@@ -156,6 +185,23 @@ def _website_profile(url, host):
     profile["description"] = (meta.get("description") or meta.get("og:description") or
                               meta.get("twitter:description") or "Not found")
     profile["published_website"] = meta.get("og:url", "Not found")
+    profile["canonical_url"] = next((link["href"] for link in parser.links if "canonical" in link["rel"].split()), "Not found")
+    profile["language"] = parser.language
+    profile["generator"] = ", ".join(parser.generators[:3]) or meta.get("generator", "Not found")
+    profile["robots_policy"] = meta.get("robots", meta.get("googlebot", "Not found"))
+    profile["theme_color"] = meta.get("theme-color", "Not found")
+    profile["social_profiles"] = [value for key, value in meta.items() if key in ("twitter:site", "twitter:creator", "article:author")][:8]
+    important = []
+    for link in parser.links:
+        rel = link["rel"].lower()
+        href = link["href"]
+        if any(word in rel for word in ("icon", "manifest", "alternate")):
+            important.append({"type": rel, "url": href})
+    for link in parser.links:
+        href = link["href"].lower()
+        if any(word in href for word in ("about", "contact", "privacy", "terms", "legal", "security")):
+            important.append({"type": "possible information page", "url": link["href"]})
+    profile["important_pages"] = important[:20]
     profile["status"] = "Static page metadata retrieved; organization claims are not independently verified"
 
     for raw_json in parser.jsonld_parts:
@@ -194,6 +240,21 @@ def _website_profile(url, host):
         if profile["organization"] != "Not found":
             break
 
+    # Preserve all structured organization/person/business records found in JSON-LD.
+    # The first recognized entity remains the primary summary; this field records entity types.
+    entity_types = []
+    for raw_json in parser.jsonld_parts:
+        try:
+            decoded = json.loads(raw_json)
+        except (ValueError, TypeError):
+            continue
+        for item in _flatten_jsonld(decoded):
+            kinds = item.get("@type", [])
+            if isinstance(kinds, str):
+                kinds = [kinds]
+            entity_types.extend(str(kind) for kind in kinds if kind)
+    profile["structured_data_types"] = sorted(set(entity_types))[:30]
+
     if profile["organization"] == "Not found":
         org_hint = meta.get("og:site_name")
         if org_hint:
@@ -203,6 +264,51 @@ def _website_profile(url, host):
         if same_as:
             profile["official_links"] = [same_as]
     return profile
+
+
+def _dns_over_https(host, record_type):
+    """Read public DNS records from a DNS-over-HTTPS resolver."""
+    try:
+        response = requests.get(
+            "https://cloudflare-dns.com/dns-query",
+            params={"name": host, "type": record_type},
+            headers={"Accept": "application/dns-json", "User-Agent": USER_AGENT},
+            timeout=TIMEOUT,
+        )
+        if not response.ok:
+            return []
+        data = response.json()
+        return [str(answer.get("data", ""))[:500] for answer in data.get("Answer", []) if answer.get("data")]
+    except (requests.RequestException, ValueError, TypeError):
+        return []
+
+
+def _certificate_transparency(host):
+    """Return a small sample of publicly logged certificates for the exact hostname."""
+    try:
+        response = requests.get(
+            "https://crt.sh/",
+            params={"q": host, "output": "json"},
+            headers={"User-Agent": USER_AGENT},
+            timeout=TIMEOUT,
+        )
+        if not response.ok:
+            return {"status": "Unavailable", "certificates": []}
+        data = response.json()
+        if not isinstance(data, list):
+            return {"status": "No certificate data returned", "certificates": []}
+        unique = {}
+        for cert in data:
+            key = str(cert.get("id", ""))
+            if key and key not in unique:
+                unique[key] = {
+                    "issuer": str(cert.get("issuer_name", "Not disclosed"))[:250],
+                    "logged_at": str(cert.get("entry_timestamp", "Not disclosed"))[:80],
+                    "names": str(cert.get("name_value", ""))[:500],
+                }
+        return {"status": "Public certificate transparency data returned", "certificates": list(unique.values())[:10]}
+    except (requests.RequestException, ValueError, TypeError):
+        return {"status": "Certificate transparency lookup unavailable", "certificates": []}
 
 
 def inspect_domain(url, features=None):
@@ -229,13 +335,21 @@ def inspect_domain(url, features=None):
             result["created"] = events.get("registration", "Not disclosed")
             result["updated"] = events.get("last changed", "Not disclosed")
             result["expires"] = events.get("expiration", "Not disclosed")
+            result["domain_status"] = ", ".join(data.get("status", [])) or "Not disclosed"
+            result["nameservers"] = ", ".join(
+                str(item.get("ldhName", "")) for item in data.get("nameservers", []) if item.get("ldhName")
+            ) or "Not disclosed"
             registrar = ""
+            registrant = ""
             for entity in data.get("entities", []):
-                if "registrar" in entity.get("roles", []):
-                    registrar = _vcard_name(entity)
-                    if registrar:
-                        break
+                roles = entity.get("roles", [])
+                name = _vcard_name(entity)
+                if "registrar" in roles and name and not registrar:
+                    registrar = name
+                if any(role in roles for role in ("registrant", "administrative", "technical")) and name and not registrant:
+                    registrant = name
             result["registrar"] = registrar or "Not disclosed in RDAP response"
+            result["registrant_contact"] = registrant or "Not disclosed in RDAP response"
         else:
             result["notes"].append("Registration records were unavailable from RDAP.")
     except (requests.RequestException, ValueError, KeyError, TypeError):
@@ -246,13 +360,27 @@ def inspect_domain(url, features=None):
         result["dns"] = ", ".join(ips[:8])
     else:
         result["notes"].append("No public DNS address was resolved.")
+    result["dns_records"] = {}
+    for record_type in ("A", "AAAA", "MX", "NS", "TXT", "CAA", "SOA"):
+        records = _dns_over_https(host, record_type)
+        if records:
+            result["dns_records"][record_type] = records[:12]
+    result["certificate_transparency"] = _certificate_transparency(host)
 
     if parsed.scheme == "https" and ips:
         try:
             context = ssl.create_default_context()
             with socket.create_connection((ips[0], 443), timeout=TIMEOUT) as sock:
                 with context.wrap_socket(sock, server_hostname=host) as tls:
-                    result["tls"] = "Valid certificate presented; expires " + tls.getpeercert().get("notAfter", "unknown")
+                    cert = tls.getpeercert()
+                    result["tls"] = "Valid certificate presented; expires " + cert.get("notAfter", "unknown")
+                    result["tls_details"] = {
+                        "subject": ", ".join("=".join(pair) for group in cert.get("subject", []) for pair in group) or "Not disclosed",
+                        "issuer": ", ".join("=".join(pair) for group in cert.get("issuer", []) for pair in group) or "Not disclosed",
+                        "valid_from": cert.get("notBefore", "Not disclosed"),
+                        "valid_until": cert.get("notAfter", "Not disclosed"),
+                        "subject_alt_names": [value for kind, value in cert.get("subjectAltName", []) if kind == "DNS"][:30],
+                    }
         except (OSError, ssl.SSLError, ValueError):
             result["tls"] = "Certificate connection failed or could not be validated"
             result["notes"].append("TLS could not be verified from this environment.")
@@ -285,6 +413,7 @@ def inspect_domain(url, features=None):
         except (requests.RequestException, ValueError, TypeError):
             result["reputation"] = "VirusTotal lookup failed; reputation is inconclusive"
 
+    result["notes"].append("Only publicly accessible, machine-readable information is collected. Private, login-protected, paywalled, or unindexed records are not available.")
     result["notes"].append("Company/founder details are shown only when published in page metadata; these claims are not independently verified.")
     result["notes"].append("Domain age and HTTPS are context only; neither proves a site is safe.")
     return result
