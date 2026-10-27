@@ -44,7 +44,7 @@ $env:TAVILY_API_KEY = "your-key-here"
 streamlit run app.py
 ```
 
-When configured, GRIZZONE includes a short search summary and source links in the website/company profile and downloadable dossier. Search snippets can be incomplete or incorrect, so open the source links and verify claims. This is not a guarantee of a complete biography.
+When configured, GRIZZONE searches for what the organization does, its products and services, target customers, founders, and company history. It displays a summary and source links in the website/company profile and downloadable dossier. Search snippets can be incomplete or incorrect, so open the source links and verify claims. This is not a guarantee of a complete biography.
 
 ## Current limitations and safety notes
 
