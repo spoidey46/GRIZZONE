@@ -106,7 +106,8 @@ def _website_profile(url, host):
         return profile
 
     # Inspect static HTML only: no JavaScript execution, downloads, or redirects.
-    request_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", parsed.params, parsed.query, ""))
+    # Query only the site's root page, not the pasted path/query, which may contain private tokens.
+    request_url = urlunparse((parsed.scheme, host, "/", "", "", ""))
     try:
         with requests.get(
             request_url,
