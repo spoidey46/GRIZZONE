@@ -80,6 +80,21 @@ def render_report(scan):
         intel=scan.get("intelligence",{})
         for key,label in [("domain","Domain"),("registrar","Registrar"),("created","Registered"),("expires","Expires"),("updated","Last updated"),("dns","Public DNS addresses"),("tls","TLS certificate"),("reputation","Threat reputation")]:
             if intel.get(key): st.text(f"{label}: {intel[key]}")
+        profile=intel.get("site_profile",{})
+        st.markdown("#### Website identity & company profile")
+        if profile:
+            if profile.get("status"): st.caption(profile["status"])
+            for key,label in [("title","Page title"),("description","Website description"),("organization","Organization / company name"),("legal_name","Legal name"),("founder","Founder"),("founding_date","Founding date"),("published_website","Website listed in metadata")]:
+                value=profile.get(key)
+                if value and value != "Not found": st.text(f"{label}: {value}")
+                elif value == "Not found": st.text(f"{label}: Not found in published metadata")
+            links=profile.get("official_links",[])
+            if links:
+                st.text("Related links published by the site:")
+                for link in links: st.text("• "+link)
+        else:
+            st.info("Website profile metadata was not available for this scan.")
+        st.caption("Company and founder details are claims published by the website, not independently verified ownership records.")
         for note in intel.get("notes",[]): st.text("• "+note)
     with t3:
         items=[("URL length",features.get("url_length")),("HTTPS","Yes" if features.get("uses_https") else "No"),("Dots",features.get("dot_count")),("Hyphens",features.get("hyphen_count")),("@ symbol","Yes" if features.get("has_at_symbol") else "No"),("IP address","Yes" if features.get("uses_ip") else "No"),("Subdomains",features.get("subdomain_count")),("Suspicious keywords",len(features.get("suspicious_keywords",[])))]
@@ -94,7 +109,7 @@ def dashboard():
         with st.form("scan_form"):
             url=st.text_input("URL to inspect",placeholder="https://example.com/login")
             go=st.form_submit_button("⌕  Analyze URL",use_container_width=True)
-        st.caption("GRIZZONE does not open the submitted page. Domain lookups may contact public metadata services.")
+        st.caption("GRIZZONE checks public domain services and reads a limited amount of static HTML metadata from the submitted page. It does not run JavaScript or follow redirects.")
         if go:
             try:
                 score,risk,reasons,features=analyze_url(url.strip())
