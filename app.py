@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import html
+import json
 from database import create_database, register_user, authenticate_user, save_scan, get_scans
 from detector import analyze_url
 from intelligence import inspect_domain
@@ -65,41 +66,174 @@ def auth_screen():
         st.markdown('</div>',unsafe_allow_html=True)
         st.markdown('<div class="muted">Passwords are stored as salted PBKDF2 hashes. Public deployment still needs HTTPS, secure hosting, persistent database storage, rate limiting, and account recovery.</div>',unsafe_allow_html=True)
 
+def _markdown_dossier(scan):
+    intel=scan.get("intelligence",{})
+    profile=intel.get("site_profile",{})
+    lines=[
+        "# GRIZZONE — URL Intelligence Dossier",
+        "",
+        "## Submitted URL",
+        scan.get("url","Not available"),
+        "",
+        "## Risk assessment",
+        f"- Verdict: {scan.get('risk','Not available')}",
+        f"- Heuristic score: {scan.get('score','Not available')}/100",
+        "- Important: this score is a rule-based signal, not a probability or guarantee.",
+        "",
+        "## Why this verdict",
+    ]
+    lines.extend(["- "+str(reason) for reason in scan.get("reasons",[])] or ["- No suspicious structural indicators were returned."])
+    lines += ["", "## Website identity and company profile"]
+    for key,label in [
+        ("domain","Domain"),("title","Page title"),("description","Description"),
+        ("organization","Organization / company"),("legal_name","Legal name"),
+        ("founder","Founder"),("founding_date","Founding date"),
+        ("published_website","Website listed in metadata"),("canonical_url","Canonical URL"),
+        ("language","Page language"),("generator","CMS / generator metadata"),
+        ("robots_policy","Robots policy"),("theme_color","Theme color"),
+        ("http_status","HTTP status"),("content_type","Content type"),
+        ("server_header","Server header"),("last_modified","Last-Modified header"),
+    ]:
+        value=profile.get(key, intel.get(key, "Not found"))
+        lines.append(f"- {label}: {value}")
+    lines += ["", "### Related and official links"]
+    lines.extend(["- "+str(x) for x in profile.get("official_links",[])] or ["- Not found"])
+    lines += ["", "### Important page and resource links"]
+    lines.extend([f"- {x.get('type','Link')}: {x.get('url','')}" for x in profile.get("important_pages",[])] or ["- Not found"])
+    lines += ["", "### Social / author metadata"]
+    lines.extend(["- "+str(x) for x in profile.get("social_profiles",[])] or ["- Not found"])
+    lines += ["", "## Domain registration"]
+    for key,label in [
+        ("registrar","Registrar"),("registrant_contact","Public registrant/administrative contact"),
+        ("created","Registration date"),("updated","Last updated"),("expires","Expiration"),
+        ("domain_status","Domain status"),("nameservers","Nameservers"),
+    ]:
+        lines.append(f"- {label}: {intel.get(key,'Not disclosed')}")
+    lines += ["", "## DNS records"]
+    for kind,values in intel.get("dns_records",{}).items():
+        lines.append(f"### {kind}")
+        lines.extend(["- "+str(v) for v in values])
+    if not intel.get("dns_records"):
+        lines.append("- No DNS records were returned.")
+    lines += ["", "## TLS certificate"]
+    lines.append("- Summary: "+str(intel.get("tls","Not checked")))
+    for key,value in intel.get("tls_details",{}).items():
+        lines.append(f"- {key.replace('_',' ').title()}: {value}")
+    lines += ["", "## Certificate transparency"]
+    ct=intel.get("certificate_transparency",{})
+    lines.append("- Status: "+str(ct.get("status","Not available")))
+    for cert in ct.get("certificates",[]):
+        lines.append(f"- Issuer: {cert.get('issuer','Not disclosed')}; logged: {cert.get('logged_at','Not disclosed')}; names: {cert.get('names','')}")
+    lines += ["", "## Website response security headers"]
+    for key,value in profile.get("security_headers",{}).items():
+        lines.append(f"- {key}: {value}")
+    lines += ["", "## Threat reputation", str(intel.get("reputation","Not available"))]
+    lines += ["", "## URL structural signals"]
+    for key,value in scan.get("features",{}).items():
+        lines.append(f"- {key.replace('_',' ').title()}: {value}")
+    lines += ["", "## Collection notes and limitations"]
+    lines.extend(["- "+str(note) for note in intel.get("notes",[])] or ["- Some sources may be unavailable or incomplete."])
+    lines.append("- Company identity fields are based on publicly published site metadata and are not independent proof of ownership.")
+    lines.append("- Missing information means it was not found in the checked sources; it does not prove the information does not exist.")
+    return "\n".join(lines)
+
+
 def render_report(scan):
     score,risk,reasons,features=scan["score"],scan["risk"],scan["reasons"],scan["features"]
+    intel=scan.get("intelligence",{})
+    profile=intel.get("site_profile",{})
     color={"HIGH RISK":"#ff6485","MEDIUM RISK":"#ffc56e","LOW RISK":"#75e6bd"}.get(risk,"#a99cff")
     st.markdown(f'<div class="panel" style="border-color:{color}66"><div class="eyebrow">Analysis complete · heuristic assessment</div><div class="result-title" style="color:{color}">{risk}</div><div style="word-break:break-all">{html.escape(scan["url"])}</div><p class="muted">Score reflects local rules, not a probability of compromise.</p><div style="font-size:36px;color:{color};font-weight:800">{score}<span style="font-size:12px"> / 100 RISK SCORE</span></div></div>',unsafe_allow_html=True)
-    t1,t2,t3=st.tabs(["Why this verdict","Domain intelligence","URL signals"])
+    md_report=_markdown_dossier(scan)
+    d1,d2=st.columns(2)
+    with d1:
+        st.download_button("Download full dossier (.md)",md_report,file_name="grizzone_url_dossier.md",mime="text/markdown",use_container_width=True)
+    with d2:
+        st.download_button("Download raw evidence (.json)",json.dumps(scan,indent=2,ensure_ascii=False,default=str),file_name="grizzone_url_evidence.json",mime="application/json",use_container_width=True)
+    t1,t2,t3,t4=st.tabs(["Why this verdict","Website & company profile","Domain & infrastructure","URL signals"])
     with t1:
         st.markdown("#### Evidence and reasoning")
         if reasons:
             for reason in reasons: st.markdown("- "+reason)
-        else: st.success("No suspicious structural indicators were detected by the current rules. This is not proof of safety.")
-        st.info("A clean structural scan, domain age, or HTTPS alone cannot prove a site is safe.")
-    with t2:
-        intel=scan.get("intelligence",{})
-        for key,label in [("domain","Domain"),("registrar","Registrar"),("created","Registered"),("expires","Expires"),("updated","Last updated"),("dns","Public DNS addresses"),("tls","TLS certificate"),("reputation","Threat reputation")]:
-            if intel.get(key): st.text(f"{label}: {intel[key]}")
-        profile=intel.get("site_profile",{})
-        st.markdown("#### Website identity & company profile")
-        if profile:
-            if profile.get("status"): st.caption(profile["status"])
-            for key,label in [("title","Page title"),("description","Website description"),("organization","Organization / company name"),("legal_name","Legal name"),("founder","Founder"),("founding_date","Founding date"),("published_website","Website listed in metadata")]:
-                value=profile.get(key)
-                if value and value != "Not found": st.text(f"{label}: {value}")
-                elif value == "Not found": st.text(f"{label}: Not found in published metadata")
-            links=profile.get("official_links",[])
-            if links:
-                st.text("Related links published by the site:")
-                for link in links: st.text("• "+link)
         else:
-            st.info("Website profile metadata was not available for this scan.")
-        st.caption("Company and founder details are claims published by the website, not independently verified ownership records.")
-        for note in intel.get("notes",[]): st.text("• "+note)
+            st.success("No suspicious structural indicators were detected by the current rules. This is not proof of safety.")
+        st.info("A clean structural scan, domain age, or HTTPS alone cannot prove a site is safe.")
+        st.markdown("#### Threat reputation")
+        st.write(intel.get("reputation","Not available"))
+        st.caption("Reputation coverage depends on external services and API configuration.")
+    with t2:
+        st.markdown("#### Identity and organization")
+        if profile.get("status"): st.caption(profile["status"])
+        fields=[
+            ("title","Page title"),("description","Website description"),
+            ("organization","Organization / company name"),("legal_name","Legal name"),
+            ("founder","Founder"),("founding_date","Founding date"),
+            ("published_website","Website listed in metadata"),("canonical_url","Canonical URL"),
+            ("language","Page language"),("generator","CMS / generator metadata"),
+            ("robots_policy","Robots policy"),("theme_color","Theme color"),
+            ("http_status","HTTP status"),("content_type","Content type"),
+            ("server_header","Server header"),("last_modified","Last modified"),
+        ]
+        for key,label in fields:
+            value=profile.get(key,"Not found")
+            st.text(f"{label}: {value}")
+        links=profile.get("official_links",[])
+        st.markdown("#### Related profiles / links published by the site")
+        if links:
+            for link in links: st.write(link)
+        else:
+            st.caption("No related profile links found in checked metadata.")
+        st.markdown("#### Important pages and resources")
+        pages=profile.get("important_pages",[])
+        if pages:
+            for item in pages: st.write(f'{item.get("type","Link")}: {item.get("url","")}')
+        else:
+            st.caption("No about/contact/legal/resource links were identified in the homepage HTML.")
+        st.markdown("#### Social and author metadata")
+        social=profile.get("social_profiles",[])
+        st.write(social if social else "Not found in checked metadata")
+        st.markdown("#### Structured data types")
+        st.write(profile.get("structured_data_types",[]))
+        st.warning("Company, founder, and social details are claims published by the website unless independently corroborated.")
     with t3:
+        st.markdown("#### Domain registration")
+        for key,label in [("domain","Domain"),("registrar","Registrar"),("registrant_contact","Public registrant/contact"),("created","Registered"),("updated","Last updated"),("expires","Expires"),("domain_status","Domain status"),("nameservers","Nameservers")]:
+            if intel.get(key): st.text(f"{label}: {intel[key]}")
+        st.markdown("#### DNS records")
+        dns_records=intel.get("dns_records",{})
+        if dns_records:
+            for record_type,records in dns_records.items():
+                with st.expander(f"{record_type} records ({len(records)})"):
+                    for record in records: st.code(str(record),language=None)
+        else:
+            st.caption("No DNS records were returned by the public resolver.")
+        st.markdown("#### Network and TLS")
+        st.text("Public DNS addresses: "+str(intel.get("dns","Unavailable")))
+        st.text("TLS: "+str(intel.get("tls","Not checked")))
+        tls_details=intel.get("tls_details",{})
+        if tls_details:
+            for key,value in tls_details.items():
+                st.text(f"{key.replace('_',' ').title()}: {value}")
+        st.markdown("#### Certificate transparency")
+        ct=intel.get("certificate_transparency",{})
+        st.caption(ct.get("status","Unavailable"))
+        for cert in ct.get("certificates",[]):
+            st.markdown(f"- **Logged:** {cert.get('logged_at','Not disclosed')} · **Issuer:** {cert.get('issuer','Not disclosed')}")
+            st.caption("Names: "+cert.get("names",""))
+        st.markdown("#### Response security headers")
+        headers=profile.get("security_headers",{})
+        if headers:
+            st.table([{"Header":key,"Status":value} for key,value in headers.items()])
+        else:
+            st.caption("Response headers were unavailable.")
+        for note in intel.get("notes",[]): st.caption("• "+note)
+    with t4:
+        st.markdown("#### URL structural signals")
         items=[("URL length",features.get("url_length")),("HTTPS","Yes" if features.get("uses_https") else "No"),("Dots",features.get("dot_count")),("Hyphens",features.get("hyphen_count")),("@ symbol","Yes" if features.get("has_at_symbol") else "No"),("IP address","Yes" if features.get("uses_ip") else "No"),("Subdomains",features.get("subdomain_count")),("Suspicious keywords",len(features.get("suspicious_keywords",[])))]
         cols=st.columns(4)
         for i,(label,value) in enumerate(items): cols[i%4].metric(label,str(value))
+        with st.expander("All extracted URL features"):
+            st.json(features)
 
 def dashboard():
     header()
