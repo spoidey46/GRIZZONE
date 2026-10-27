@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import html
 from database import create_database, register_user, authenticate_user, save_scan, get_scans
 from detector import analyze_url
 from intelligence import inspect_domain
@@ -67,7 +68,7 @@ def auth_screen():
 def render_report(scan):
     score,risk,reasons,features=scan["score"],scan["risk"],scan["reasons"],scan["features"]
     color={"HIGH RISK":"#ff6485","MEDIUM RISK":"#ffc56e","LOW RISK":"#75e6bd"}.get(risk,"#a99cff")
-    st.markdown(f'<div class="panel" style="border-color:{color}66"><div class="eyebrow">Analysis complete · heuristic assessment</div><div class="result-title" style="color:{color}">{risk}</div><div style="word-break:break-all">{scan["url"]}</div><p class="muted">Score reflects local rules, not a probability of compromise.</p><div style="font-size:36px;color:{color};font-weight:800">{score}<span style="font-size:12px"> / 100 RISK SCORE</span></div></div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="panel" style="border-color:{color}66"><div class="eyebrow">Analysis complete · heuristic assessment</div><div class="result-title" style="color:{color}">{risk}</div><div style="word-break:break-all">{{html.escape(scan["url"])}</div><p class="muted">Score reflects local rules, not a probability of compromise.</p><div style="font-size:36px;color:{color};font-weight:800">{score}<span style="font-size:12px"> / 100 RISK SCORE</span></div></div>',unsafe_allow_html=True)
     t1,t2,t3=st.tabs(["Why this verdict","Domain intelligence","URL signals"])
     with t1:
         st.markdown("#### Evidence and reasoning")
@@ -78,8 +79,8 @@ def render_report(scan):
     with t2:
         intel=scan.get("intelligence",{})
         for key,label in [("domain","Domain"),("registrar","Registrar"),("created","Registered"),("expires","Expires"),("updated","Last updated"),("dns","Public DNS addresses"),("tls","TLS certificate"),("reputation","Threat reputation")]:
-            if intel.get(key): st.markdown(f'**{label}:** {intel[key]}')
-        for note in intel.get("notes",[]): st.caption("• "+note)
+            if intel.get(key): st.text(f"{label}: {intel[key]}")
+        for note in intel.get("notes",[]): st.text("• "+note)
     with t3:
         items=[("URL length",features.get("url_length")),("HTTPS","Yes" if features.get("uses_https") else "No"),("Dots",features.get("dot_count")),("Hyphens",features.get("hyphen_count")),("@ symbol","Yes" if features.get("has_at_symbol") else "No"),("IP address","Yes" if features.get("uses_ip") else "No"),("Subdomains",features.get("subdomain_count")),("Suspicious keywords",len(features.get("suspicious_keywords",[])))]
         cols=st.columns(4)
