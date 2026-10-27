@@ -320,7 +320,8 @@ def _web_research(host, organization=""):
             "answer": "",
             "results": [],
         }
-    query = '"{}" company founder history about'.format(organization or host)
+    subject = organization or host
+    query = '"{}" what does this company do products services target customers founders history official about'.format(subject)
     try:
         response = requests.post(
             "https://api.tavily.com/search",
@@ -329,7 +330,7 @@ def _web_research(host, organization=""):
                 "query": query,
                 "search_depth": "basic",
                 "topic": "general",
-                "max_results": 6,
+                "max_results": 8,
                 "include_answer": True,
                 "include_raw_content": False,
             },
@@ -350,8 +351,10 @@ def _web_research(host, organization=""):
                 "score": item.get("score"),
             })
         return {
-            "status": "Public web search results returned; verify claims against linked sources",
-            "answer": str(data.get("answer") or "")[:2500],
+            "status": "Public web research returned; treat summaries as leads and verify claims against linked sources",
+            "subject": subject,
+            "research_topics": ["purpose and services", "products", "target customers", "founders and history"],
+            "answer": str(data.get("answer") or "")[:3500],
             "results": results,
         }
     except (requests.RequestException, ValueError, TypeError):
