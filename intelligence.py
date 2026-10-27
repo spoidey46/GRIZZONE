@@ -311,6 +311,53 @@ def _certificate_transparency(host):
         return {"status": "Certificate transparency lookup unavailable", "certificates": []}
 
 
+def _web_research(host, organization=""):
+    """Optional search-provider lookup for public company background and source links."""
+    api_key = os.environ.get("TAVILY_API_KEY", "").strip()
+    if not api_key:
+        return {
+            "status": "Not configured — set TAVILY_API_KEY to enable web research",
+            "answer": "",
+            "results": [],
+        }
+    query = '"{}" company founder history about'.format(organization or host)
+    try:
+        response = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": api_key,
+                "query": query,
+                "search_depth": "basic",
+                "topic": "general",
+                "max_results": 6,
+                "include_answer": True,
+                "include_raw_content": False,
+            },
+            headers={"User-Agent": USER_AGENT, "Content-Type": "application/json"},
+            timeout=TIMEOUT + 5,
+        )
+        if response.status_code == 401 or response.status_code == 403:
+            return {"status": "Search API key was rejected", "answer": "", "results": []}
+        if not response.ok:
+            return {"status": "Web research unavailable (HTTP {})".format(response.status_code), "answer": "", "results": []}
+        data = response.json()
+        results = []
+        for item in data.get("results", [])[:6]:
+            results.append({
+                "title": str(item.get("title", "Untitled"))[:300],
+                "url": str(item.get("url", ""))[:1000],
+                "snippet": str(item.get("content", ""))[:1200],
+                "score": item.get("score"),
+            })
+        return {
+            "status": "Public web search results returned; verify claims against linked sources",
+            "answer": str(data.get("answer") or "")[:2500],
+            "results": results,
+        }
+    except (requests.RequestException, ValueError, TypeError):
+        return {"status": "Web research lookup failed", "answer": "", "results": []}
+
+
 def inspect_domain(url, features=None):
     parsed = urlparse(url if "://" in url else "https://" + url)
     host = (parsed.hostname or "").lower().strip(".")
@@ -388,6 +435,10 @@ def inspect_domain(url, features=None):
         result["tls"] = "URL uses HTTP, not HTTPS"
 
     result["site_profile"] = _website_profile(url, host)
+    organization = result["site_profile"].get("organization", "")
+    if organization == "Not found":
+        organization = ""
+    result["web_research"] = _web_research(host, organization)
 
     vt_key = os.environ.get("VT_API_KEY", "").strip()
     if vt_key:
