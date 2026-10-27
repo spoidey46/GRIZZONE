@@ -1,6 +1,6 @@
 # GRIZZONE — URL Intelligence
 
-A dark, anime-inspired Streamlit application for explainable URL-risk analysis. The feature branch adds user registration/login, per-account scan history, a downloadable URL intelligence dossier (Markdown and JSON), website/company metadata, RDAP domain records, DNS record lookups, TLS details, certificate-transparency samples, HTTP security-header checks, and optional VirusTotal reputation.
+A dark, anime-inspired Streamlit application for explainable URL-risk analysis. The feature branch adds user registration/login, per-account scan history, a downloadable URL intelligence dossier (Markdown and JSON), website/company metadata, RDAP domain records, DNS record lookups, TLS details, certificate-transparency samples, HTTP security-header checks, and optional VirusTotal reputation and public web research.
 
 ## Run locally
 
@@ -32,6 +32,19 @@ streamlit run app.py
 ```
 
 If no key is configured, VirusTotal reputation is explicitly shown as not configured. RDAP and DNS/TLS lookups may fail due to network restrictions, unavailable records, or rate limits.
+
+## Optional public web research
+
+To include search results about the company/founder from public webpages, configure a Tavily API key in your local environment. The search feature is optional; the rest of the scanner works without it. Do not paste API keys into source files or commit them to GitHub.
+
+Windows PowerShell (current terminal only):
+
+```powershell
+$env:TAVILY_API_KEY = "your-key-here"
+streamlit run app.py
+```
+
+When configured, GRIZZONE includes a short search summary and source links in the website/company profile and downloadable dossier. Search snippets can be incomplete or incorrect, so open the source links and verify claims. This is not a guarantee of a complete biography.
 
 ## Current limitations and safety notes
 
