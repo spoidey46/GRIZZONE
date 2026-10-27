@@ -68,7 +68,7 @@ def auth_screen():
 def render_report(scan):
     score,risk,reasons,features=scan["score"],scan["risk"],scan["reasons"],scan["features"]
     color={"HIGH RISK":"#ff6485","MEDIUM RISK":"#ffc56e","LOW RISK":"#75e6bd"}.get(risk,"#a99cff")
-    st.markdown(f'<div class="panel" style="border-color:{color}66"><div class="eyebrow">Analysis complete · heuristic assessment</div><div class="result-title" style="color:{color}">{risk}</div><div style="word-break:break-all">{{html.escape(scan["url"])}</div><p class="muted">Score reflects local rules, not a probability of compromise.</p><div style="font-size:36px;color:{color};font-weight:800">{score}<span style="font-size:12px"> / 100 RISK SCORE</span></div></div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="panel" style="border-color:{color}66"><div class="eyebrow">Analysis complete · heuristic assessment</div><div class="result-title" style="color:{color}">{risk}</div><div style="word-break:break-all">{html.escape(scan["url"])}</div><p class="muted">Score reflects local rules, not a probability of compromise.</p><div style="font-size:36px;color:{color};font-weight:800">{score}<span style="font-size:12px"> / 100 RISK SCORE</span></div></div>',unsafe_allow_html=True)
     t1,t2,t3=st.tabs(["Why this verdict","Domain intelligence","URL signals"])
     with t1:
         st.markdown("#### Evidence and reasoning")
