@@ -1,6 +1,6 @@
 # GRIZZONE — URL Intelligence
 
-A dark, anime-inspired Streamlit application for explainable URL-risk analysis. The current feature branch adds user registration/login, per-account scan history, passive domain intelligence, and an optional VirusTotal lookup.
+A dark, anime-inspired Streamlit application for explainable URL-risk analysis. The current feature branch adds user registration/login, per-account scan history, domain intelligence, website identity/company metadata when published, and an optional VirusTotal lookup.
 
 ## Run locally
 
@@ -37,7 +37,8 @@ If no key is configured, VirusTotal reputation is explicitly shown as not config
 
 - The score is a heuristic risk indicator, not a probability that a URL is malicious.
 - A low-risk result does not guarantee safety; reputation and domain history can be incomplete.
-- GRIZZONE does not fetch or render the submitted page. Domain metadata lookups contact public services.
+- GRIZZONE reads a limited amount of static HTML from the site's homepage to extract its title, description, and any published Schema.org organization details. It does not execute JavaScript or follow redirects. Domain metadata lookups contact public services.
+- Company name, founder, and founding date are displayed only when the site publishes them in parseable metadata. These are website claims, not independently verified ownership facts; missing information is shown as unavailable.
 - Accounts use salted PBKDF2-HMAC-SHA256 password hashes. The demo does not yet provide email verification, password reset, account lockout/rate limiting, or production-grade session management.
 - The default SQLite database is local. For public hosting, use a persistent database, HTTPS, secure secret management, request throttling, robust authorization review, and deployment-specific hardening.
 - Legacy scans created before user accounts were added remain unassigned and are not shown in user-specific history.
