@@ -109,7 +109,7 @@ def dashboard():
         with st.form("scan_form"):
             url=st.text_input("URL to inspect",placeholder="https://example.com/login")
             go=st.form_submit_button("⌕  Analyze URL",use_container_width=True)
-        st.caption("GRIZZONE checks public domain services and reads a limited amount of static HTML metadata from the submitted page. It does not run JavaScript or follow redirects.")
+        st.caption("GRIZZONE checks public domain services and reads limited static HTML metadata from the site's homepage. It does not run JavaScript or follow redirects.")
         if go:
             try:
                 score,risk,reasons,features=analyze_url(url.strip())
