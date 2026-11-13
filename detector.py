@@ -53,7 +53,9 @@ def _validate_url(value):
         if len(tld) < 2 or not re.fullmatch(r"[a-z0-9-]+", tld):
             raise ValueError("The domain suffix does not look valid.")
 
-    return raw
+    # Bare domains are interpreted as HTTPS by default, matching intelligence.py.
+    # Preserve an explicitly supplied HTTP scheme so the transport warning remains meaningful.
+    return parsed._replace(scheme=parsed.scheme.lower()).geturl()
 
 
 def _typosquat_brands(hostname):
