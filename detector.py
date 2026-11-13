@@ -119,7 +119,7 @@ def analyze_url(url):
         reasons.append("The domain contains non-ASCII characters; inspect the displayed domain carefully.")
 
     if all_brand_flags:
-        score += min(35 + (10 if typo_brands else 0), 45)
+        score += 45
         reasons.append("Possible brand impersonation / typosquatting: " + ", ".join(all_brand_flags) + ".")
 
     if features["suspicious_tld"]:
