@@ -154,7 +154,7 @@ def render_report(scan):
     score,risk,reasons,features=scan["score"],scan["risk"],scan["reasons"],scan["features"]
     intel=scan.get("intelligence",{})
     profile=intel.get("site_profile",{})
-    color={"HIGH RISK":"#ff6485","MEDIUM RISK":"#ffc56e","LOW RISK":"#75e6bd"}.get(risk,"#a99cff")
+    color={"HIGH RISK":"#ff6485","MEDIUM RISK":"#ffc56e","LOW RISK":"#75e6bd","UNVERIFIED":"#a99cff"}.get(risk,"#a99cff")
     st.markdown(f'<div class="panel" style="border-color:{color}66"><div class="eyebrow">Analysis complete · heuristic assessment</div><div class="result-title" style="color:{color}">{risk}</div><div style="word-break:break-all">{html.escape(scan["url"])}</div><p class="muted">Score reflects local rules, not a probability of compromise.</p><div style="font-size:36px;color:{color};font-weight:800">{score}<span style="font-size:12px"> / 100 RISK SCORE</span></div></div>',unsafe_allow_html=True)
     md_report=_markdown_dossier(scan)
     d1,d2=st.columns(2)
@@ -282,6 +282,11 @@ def dashboard():
             try:
                 score,risk,reasons,features=analyze_url(url.strip())
                 with st.spinner("Collecting domain intelligence…"): intel=inspect_domain(url.strip(),features)
+                # A hostname that does not resolve cannot receive a reassuring low-risk verdict.
+                # Keep the heuristic score, but mark the assessment as unverified.
+                if not intel.get("dns") or intel.get("dns") == "Unavailable":
+                    risk = "UNVERIFIED"
+                    reasons.append("No public DNS address was resolved. The domain could be unregistered, inactive, or temporarily unreachable; its safety cannot be established.")
                 scan={"url":url.strip(),"score":score,"risk":risk,"reasons":reasons,"features":features,"intelligence":intel}
                 save_scan(st.session_state.user["id"],scan); st.session_state.last_scan=scan
             except ValueError as e: st.error(str(e))
