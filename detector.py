@@ -50,7 +50,7 @@ def _validate_url(value):
         if any(len(label) > 63 or not label_pattern.fullmatch(label) for label in labels):
             raise ValueError("The domain name contains an invalid label.")
         tld = labels[-1]
-        if len(tld) < 2 or not re.fullmatch(r"[a-z0-9-]+", tld):
+        if not (re.fullmatch(r"[a-z]{2,63}", tld) or re.fullmatch(r"xn--[a-z0-9-]{2,59}", tld)):
             raise ValueError("The domain suffix does not look valid.")
 
     # Bare domains are interpreted as HTTPS by default, matching intelligence.py.
