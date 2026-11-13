@@ -192,11 +192,13 @@ def _website_profile(url, host):
     profile["theme_color"] = meta.get("theme-color", "Not found")
     profile["social_profiles"] = [value for key, value in meta.items() if key in ("twitter:site", "twitter:creator", "article:author")][:8]
     important = []
+    # Do not present rel="alternate" endpoints as ordinary website pages.
+    # WordPress commonly uses these for RSS feeds and oEmbed machine endpoints.
     for link in parser.links:
-        rel = link["rel"].lower()
+        rel = link["rel"].lower().split()
         href = link["href"]
-        if any(word in rel for word in ("icon", "manifest", "alternate")):
-            important.append({"type": rel, "url": href})
+        if any(token in ("icon", "manifest") for token in rel):
+            important.append({"type": "site resource (" + " ".join(rel) + ")", "url": href})
     for link in parser.links:
         href = link["href"].lower()
         if any(word in href for word in ("about", "contact", "privacy", "terms", "legal", "security")):
