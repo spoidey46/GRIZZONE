@@ -66,8 +66,10 @@ def _typosquat_brands(hostname):
             continue
         # Only flag close spellings of a known brand; generic keyword presence
         # alone is not enough to claim impersonation.
-        similarity = SequenceMatcher(None, label, brand).ratio()
-        if len(label) >= 4 and similarity >= 0.78:
+        candidates = [part for part in re.split(r"[-_]", label) if part]
+        candidates.append(label)
+        similarity = max((SequenceMatcher(None, part, brand).ratio() for part in candidates), default=0.0)
+        if any(len(part) >= 4 for part in candidates) and similarity >= 0.78:
             matches.append(brand)
     return sorted(set(matches))
 
